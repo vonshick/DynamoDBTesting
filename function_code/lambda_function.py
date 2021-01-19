@@ -103,6 +103,9 @@ def create_new_table(file_name, config_file_object, stage_bucket, dynamodb_clien
                 }
             )
 
+
+        waiter = dynamodb_client.get_waiter('table_exists')
+        waiter.wait(TableName=table_name)
         dynamodb_client.batch_write_item(RequestItems={table_name: put_requests})
 
     except Exception as e:
@@ -178,4 +181,4 @@ def lambda_handler(event, context, local_debug=False):
         print(f'Data updater error. Error message {e}')
 
 
-lambda_handler("event", "context", True)
+# lambda_handler("event", "context", True)
