@@ -1,0 +1,220 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Transform": "AWS::Serverless-2016-10-31",
+    "Description": "Data lake infrastracture template.",
+    "Resources": {
+       "dataLakeStageBucket": {
+          "Type": "AWS::S3::Bucket",
+          "DeletionPolicy": "Retain",
+          "Properties": {
+             "BucketName": "data-lake-stage",
+             "AccessControl": "Private",
+             "PublicAccessBlockConfiguration": {
+                "BlockPublicAcls": true,
+                "BlockPublicPolicy": true,
+                "IgnorePublicAcls": true,
+                "RestrictPublicBuckets": true
+             }
+          }
+       },
+       "dataLakeFinalBucket": {
+          "Type": "AWS::S3::Bucket",
+          "DeletionPolicy": "Retain",
+          "Properties": {
+             "BucketName": "data-lake-final",
+             "AccessControl": "Private",
+             "PublicAccessBlockConfiguration": {
+                "BlockPublicAcls": true,
+                "BlockPublicPolicy": true,
+                "IgnorePublicAcls": true,
+                "RestrictPublicBuckets": true
+             }
+          }
+       },
+       "dataLakeConfigBucket": { 
+         "Type": "AWS::S3::Bucket",
+         "DeletionPolicy": "Retain",
+         "Properties": {
+            "BucketName": "data-lake-config",
+            "AccessControl": "Private",
+            "PublicAccessBlockConfiguration": {
+               "BlockPublicAcls": true,
+               "BlockPublicPolicy": true,
+               "IgnorePublicAcls": true,
+               "RestrictPublicBuckets": true
+            }
+         }
+      },
+ 
+       "dataIngestionFunction": {
+          "Type": "AWS::Serverless::Function",
+          "Properties": {
+             "CodeUri": "./function_code",
+             "Runtime": "python3.7",
+             "Timeout": 100,
+             "Description": "Update files uploaded to S3 if required by the configuration",
+             "Environment": {
+                "Variables": {
+                   "CONFIG_BUCKET": {
+                      "Ref": "dataLakeConfigBucket"
+                   },
+                   "FINAL_BUCKET": {
+                      "Ref": "dataLakeFinalBucket"
+                   },
+                   "CONFIG_FILE_NAME": "files_to_update.json"
+                }
+             },
+             "FunctionName": "data-lake-ingestion",
+             "Handler": "lambda_function.lambda_handler",
+             "MemorySize": 1024,
+             "Role": {
+                "Fn::GetAtt": [
+                   "dataIngestionRole",
+                   "Arn"
+                ]
+             },
+             "Events": {
+                "S3Trigger": {
+                   "Type": "S3",
+                   "Properties": {
+                      "Bucket": {
+                         "Ref": "dataLakeStageBucket"
+                      },
+                      "Events": "s3:ObjectCreated:*"
+                   }
+                }
+             }
+          }
+       },
+ 
+       "dataIngestionRole": {
+          "Type": "AWS::IAM::Role",
+          "Properties": {
+             "RoleName": "dataIngestionRole",
+             "AssumeRolePolicyDocument": {
+                "Version": "2012-10-17",
+                "Statement": [
+                   {
+                      "Effect": "Allow",
+                      "Principal": {
+                         "Service": [
+                            "lambda.amazonaws.com"
+                         ]
+                      },
+                      "Action": [
+                         "sts:AssumeRole"
+                      ]
+                   }
+                ]
+             },
+             "Path": "/",
+             "ManagedPolicyArns": [
+                "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+             ],
+             "Policies": [
+                {
+                   "PolicyName": "dataLakeDataIngestionPolicy",
+                   "PolicyDocument": {
+                      "Version": "2012-10-17",
+                      "Statement": [
+                         {
+                            "Effect": "Allow",
+                            "Action": [
+                               "s3:ListBucket",
+                               "s3:GetBucketLocation"
+                            ],
+                            "Resource": [
+                               {
+                                  "Fn::Sub": "arn:${AWS::Partition}:s3:::data-lake-stage"
+                               },
+                               {
+                                  "Fn::Sub": [
+                                     "arn:${AWS::Partition}:s3:::${bucketName}",
+                                     {
+                                        "bucketName": {
+                                           "Ref": "dataLakeFinalBucket"
+                                        }
+                                     }
+                                    ]
+                               },
+                               {
+                                  "Fn::Sub": [
+                                     "arn:${AWS::Partition}:s3:::${bucketName}",
+                                     {
+                                        "bucketName": {
+                                           "Ref": "dataLakeConfigBucket"
+                                        }
+                                     }
+                                  ]
+                               }
+                            ]
+                         },
+                         {
+                            "Effect": "Allow",
+                            "Action": [
+                               "s3:GetObject"
+                            ],
+                            "Resource": [
+                                {
+                                   "Fn::Sub": "arn:${AWS::Partition}:s3:::data-lake-stage/*"
+                                },
+                               {
+                                    "Fn::Sub": [
+                                        "arn:${AWS::Partition}:s3:::${bucketName}",
+                                        {
+                                            "bucketName": {
+                                                "Ref": "dataLakeConfigBucket"
+                                            }
+                                        }
+                                    ]
+                               },
+                               {
+                                  "Fn::Sub": [
+                                     "arn:${AWS::Partition}:s3:::${bucketName}/*",
+                                     {
+                                        "bucketName": {
+                                           "Ref": "dataLakeFinalBucket"
+                                        }
+                                     }
+                                  ]
+                               }
+                            ]
+                         },
+                         {
+                            "Effect": "Allow",
+                            "Action": [
+                               "s3:DeleteObject",
+                               "s3:CopyObject"
+                            ],
+                            "Resource": [
+                               {
+                                  "Fn::Sub": "arn:${AWS::Partition}:s3:::data-lake-stage/*"
+                               }
+                            ]
+                         },
+                         {
+                            "Effect": "Allow",
+                            "Action": [
+                               "s3:PutObject"
+                            ],
+                            "Resource": [
+                               {
+                                  "Fn::Sub": [
+                                     "arn:${AWS::Partition}:s3:::${bucketName}/*",
+                                     {
+                                        "bucketName": {
+                                           "Ref": "dataLakeFinalBucket"
+                                        }
+                                     }
+                                  ]
+                               }
+                            ]
+                         }
+                      ]
+                   }
+                }
+             ]
+          }
+        }
+    }
+ }

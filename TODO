@@ -1,0 +1,15 @@
+1. Sprawdz, czy plik jest typu update (jeśli nie, to koniec)
+
+2. Sprawdz, czy plik ma swoją tabelkę 
+    2.1 Jeśli nie:
+        2.1.1 Utwórz tabelkę
+        2.1.2 Zapisz dane jako klucz i reszta 
+        2.1.3 Przenieś plik do correcta
+
+    2.2 Jeśli tak:
+        2.2.1 Wykonaj update tabeli (update dla kluczy, które nie istnieją po prostu wstawia wiersze)
+        2.3.1 Wrzuć do bucketa zupdate'owany plik (na podstawie tabelki w bazie)
+
+
+Done: 
+- AWS SAM CLI installed

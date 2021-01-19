@@ -1,0 +1,28 @@
+{
+    "data_updater_test": [
+        {
+            "PutRequest": {
+                "Item": {
+                    "PrimaryKeyColumns": {
+                        "S": "1;2"
+                    }, 
+                    "RestOfTheColumns": {
+                        "S": "3;4"
+                    }
+                }
+            }
+        },
+        {
+            "PutRequest": {
+                "Item": {
+                    "PrimaryKeyColumns": {
+                        "S": "5;6"
+                    }, 
+                    "RestOfTheColumns": {
+                        "S": "7;8"
+                    }
+                }
+            }
+        }
+    ]
+}
