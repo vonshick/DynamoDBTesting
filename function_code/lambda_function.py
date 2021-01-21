@@ -27,48 +27,40 @@ def move_file_to_final_bucket(stage_bucket, final_bucket, file_name, to_update, 
         raise
 
 
-def create_single_put_request(row_splitted, primary_key_values, rest_of_the_columns_values):
-    return
+def update_record(dynamodb_client, table_name, primary_key_values, rest_of_the_columns_values):
+    dynamodb_client.update_item(
+        TableName=table_name,
+        Key={
+            'PrimaryKeyColumns': {
+                'S': ';'.join(primary_key_values),
+            }
+        },
+        AttributeUpdates={
+            'RestOfTheColumns': {
+                'Value': {
+                    'S': ';'.join(rest_of_the_columns_values)
+                }
+            }
+        }
+    )
 
-    {
+
+def create_put_request(primary_key_values, rest_of_the_columns_values):
+    return {
         'PutRequest': {
             'Item': {
                 'PrimaryKeyColumns': {
-                    'S': 'Somewhat Famous',
+                    'S': ';'.join(primary_key_values),
                 },
                 'RestOfTheColumns': {
-                    'S': 'Call Me Today',
-                },
-            },
-        },
+                    'S': ';'.join(rest_of_the_columns_values),
+                }
+            }
+        }
     }
 
 
-def create_new_table(file_name, config_file_object, stage_bucket, dynamodb_client, s3_client):
-    table_name = f"data_updater_{file_name.replace('.csv', '')}"
-
-    try:
-        dynamodb_client.create_table(
-            TableName=table_name,
-            BillingMode='PAY_PER_REQUEST',
-            AttributeDefinitions=[
-                {
-                    'AttributeName': 'PrimaryKeyColumns',
-                    'AttributeType': 'S',
-                }
-            ],
-            KeySchema=[
-                {
-                    'AttributeName': 'PrimaryKeyColumns',
-                    'KeyType': 'HASH',
-                }
-            ]
-        )
-    except Exception as e:
-        print(
-            f"Table {file_name.replace('.csv', '')} could not be created. Error message:\n{e}")
-        raise
-
+def process_file_records(table_name, file_name, config_file_object, stage_bucket, dynamodb_client, s3_client, new_table_created):
     try:
         get_object_response = s3_client.get_object(
             Bucket=stage_bucket, Key=file_name)
@@ -88,36 +80,57 @@ def create_new_table(file_name, config_file_object, stage_bucket, dynamodb_clien
                                   for i in primary_key_columns_indexes]
             rest_of_the_columns_values = [row_splitted[i]
                                           for i in rest_of_the_columns_indexes]
-            put_requests.append(
-                {
-                    'PutRequest': {
-                        'Item': {
-                            'PrimaryKeyColumns': {
-                                'S': ';'.join(primary_key_values),
-                            },
-                            'RestOfTheColumns': {
-                                'S': ';'.join(rest_of_the_columns_values),
-                            }
-                        }
-                    }
-                }
-            )
+            if(new_table_created):
+                put_requests.append(
+                    create_put_request(
+                        primary_key_values, rest_of_the_columns_values))
+            else:
+                update_record(dynamodb_client, table_name,
+                              primary_key_values, rest_of_the_columns_values)
 
-
-        waiter = dynamodb_client.get_waiter('table_exists')
-        waiter.wait(TableName=table_name)
-        dynamodb_client.batch_write_item(RequestItems={table_name: put_requests})
+        if(new_table_created):
+            waiter = dynamodb_client.get_waiter('table_exists')
+            waiter.wait(TableName=table_name)
+            dynamodb_client.batch_write_item(
+                RequestItems={table_name: put_requests})
 
     except Exception as e:
-        print(
-            f"File '{file_name}' records could not be loaded into the {table_name} table. Error message:\n{e}")
+        if(new_table_created):
+            print(
+                f"File '{file_name}' records could not be loaded into the {table_name} table. Error message:\n{e}")
+        else:
+            print(
+                f"Table {table_name} could not be updated. Error message:\n{e}") 
         raise
 
 
-def check_if_table_already_exists(file_name, dynamodb_client):
+def create_new_table(table_name, dynamodb_client):
+    try:
+        dynamodb_client.create_table(
+            TableName=table_name,
+            BillingMode='PAY_PER_REQUEST',
+            AttributeDefinitions=[
+                {
+                    'AttributeName': 'PrimaryKeyColumns',
+                    'AttributeType': 'S',
+                }
+            ],
+            KeySchema=[
+                {
+                    'AttributeName': 'PrimaryKeyColumns',
+                    'KeyType': 'HASH',
+                }
+            ]
+        )
+    except Exception as e:
+        print(
+            f"Table {table_name} could not be created. Error message:\n{e}")
+        raise
+
+
+def check_if_table_exists(table_name, dynamodb_client):
     try:
         list_tables_response = dynamodb_client.list_tables()
-        table_name = f"data_updater_{file_name.replace('.csv', '')}"
         return table_name in list_tables_response['TableNames']
     except Exception as e:
         print(f"DynamoDB tables could not be listed. Error message:\n{e}")
@@ -168,14 +181,18 @@ def lambda_handler(event, context, local_debug=False):
                 stage_bucket, final_bucket, file_name, False, s3_client)
             return
 
-        if(not check_if_table_already_exists(file_name, dynamodb_client)):
-            create_new_table(file_name, config_file_object,
-                             stage_bucket, dynamodb_client, s3_client)
+        table_name = f"data_updater_{file_name.replace('.csv', '')}"
+
+        if(not check_if_table_exists(table_name, dynamodb_client)):
+            create_new_table(table_name, dynamodb_client)
+            process_file_records(table_name, file_name, config_file_object,
+                                 stage_bucket, dynamodb_client, s3_client, True)
             move_file_to_final_bucket(
                 stage_bucket, final_bucket, file_name, True, s3_client)
         else:
-            # update_file
-            print("TODO")
+            process_file_records(table_name, file_name, config_file_object,
+                                 stage_bucket, dynamodb_client, s3_client, False)
+            
 
     except Exception as e:
         print(f'Data updater error. Error message {e}')
