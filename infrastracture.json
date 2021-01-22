@@ -124,7 +124,8 @@
                               "dynamodb:CreateTable",
                               "dynamodb:BatchWriteItem",
                               "dynamodb:UpdateItem",
-                              "dynamodb:DescribeTable"                              
+                              "dynamodb:DescribeTable",
+                              "dynamodb:Scan"                            
                            ],
                            "Resource" : [
                               "arn:aws:dynamodb:eu-central-1:*:table/*"

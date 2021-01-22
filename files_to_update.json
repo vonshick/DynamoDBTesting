@@ -1,14 +1,10 @@
 {
     "Files": {
         "test.csv": {
-            "PrimaryKey": [
-                "a", "b" 
-            ]
+            "PrimaryKey": "a"
         },
         "file_2.csv": {
-            "PrimaryKey": [
-                "column_3", "column_4" 
-            ]
+            "PrimaryKey": "b"
         }
     }
 }
