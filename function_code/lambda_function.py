@@ -27,7 +27,7 @@ def move_file_to_final_bucket(stage_bucket, final_bucket, file_name, to_update, 
         raise
 
 
-def create_updated_csv_file(header, table_name, file_name, final_bucket, s3_client):
+def create_updated_csv_file(header, table_name, file_name, final_bucket, stage_bucket, s3_client):
     dynamodb_resource = boto3.resource('dynamodb')
     table = dynamodb_resource.Table(table_name)
     scan_kwargs = {
@@ -62,9 +62,14 @@ def create_updated_csv_file(header, table_name, file_name, final_bucket, s3_clie
         print(f'Updated file {file_name} was put to the {final_bucket} bucket.')
     except Exception as e:
         print(
-            f'Updated file could not be put to the {final_bucket} bucket. Error message {e}')
+            f'Updated file {file_name} could not be put to the {final_bucket} bucket. Error message {e}')
         raise
-
+    try:
+        s3_client.delete_object(Bucket=stage_bucket, Key=file_name)
+    except Exception as e:
+        print(
+            f'File {file_name} could not be delted from the {stage_bucket} bucket. Error message {e}')
+        raise
 
 def update_record(dynamodb_client, table_name, row_splitted, header, primary_key_index):
 
@@ -167,9 +172,9 @@ def process_file_records(table_name, file_name, config_file_object, final_bucket
             move_file_to_final_bucket(
                 stage_bucket, final_bucket, file_name, True, s3_client)
         else:
-            print(f'{table_name} table was updated.')
+            print(f'Table {table_name} updated.')
             create_updated_csv_file(
-                header, table_name, file_name, final_bucket, s3_client)
+                header, table_name, file_name, final_bucket, stage_bucket, s3_client)
 
     except Exception as e:
         if(not table_exists):
@@ -230,6 +235,7 @@ def lambda_handler(event, context, local_debug=False):
         config_file_object = get_config_file(
             config_bucket, config_file_name, s3_client)
         if(file_name not in config_file_object["Files"]):
+            print(f'File {file_name} was not present in the update config file.')
             move_file_to_final_bucket(
                 stage_bucket, final_bucket, file_name, False, s3_client)
             return
