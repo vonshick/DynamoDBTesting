@@ -59,6 +59,7 @@ def create_updated_csv_file(header, table_name, file_name, final_bucket, s3_clie
     try:
         s3_client.put_object(
             Body=final_file_binary, Bucket=final_bucket, Key=file_name)
+        print(f'Updated file {file_name} was put to the {final_bucket} bucket.')
     except Exception as e:
         print(
             f'Updated file could not be put to the {final_bucket} bucket. Error message {e}')
@@ -120,6 +121,8 @@ def create_new_table(table_name, dynamodb_client, primary_key_column):
                 }
             ]
         )
+
+        print(f'Table {table_name} created.')
     except Exception as e:
         print(
             f"Table {table_name} could not be created. Error message:\n{e}")
@@ -127,6 +130,11 @@ def create_new_table(table_name, dynamodb_client, primary_key_column):
 
 
 def process_file_records(table_name, file_name, config_file_object, final_bucket, stage_bucket, dynamodb_client, s3_client, table_exists):
+    if(table_exists):
+        print(f'Table {table_name} will be updated.\n')
+    else:
+        print(f'Table {table_name} will be created.\n')
+
     try:
         get_object_response = s3_client.get_object(
             Bucket=stage_bucket, Key=file_name)
@@ -155,9 +163,11 @@ def process_file_records(table_name, file_name, config_file_object, final_bucket
             waiter.wait(TableName=table_name)
             dynamodb_client.batch_write_item(
                 RequestItems={table_name: put_requests})
+            print(f'File {file_name} rows were inserted into the {table_name} table.')
             move_file_to_final_bucket(
                 stage_bucket, final_bucket, file_name, True, s3_client)
         else:
+            print(f'{table_name} table was updated.')
             create_updated_csv_file(
                 header, table_name, file_name, final_bucket, s3_client)
 
